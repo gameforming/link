@@ -1,17 +1,47 @@
-const express = require("express");
-const path = require("path");
+const WebSocket = require("ws");
 
-const app = express();
-const PORT = process.env.PORT || 3000;
+const wss = new WebSocket.Server({ port: process.env.PORT || 3000 });
 
-// serve frontend
-app.use(express.static(__dirname));
+// userId -> socket
+const users = {};
 
-// example API
-app.get("/api/ping", (req, res) => {
-  res.json({ status: "ok" });
+wss.on("connection", (ws) => {
+
+  let userId = null;
+
+  ws.on("message", (msg) => {
+
+    const data = JSON.parse(msg);
+
+    // 1. register user
+    if (data.type === "register") {
+      userId = data.userId;
+      users[userId] = ws;
+      return;
+    }
+
+    // 2. send message
+    if (data.type === "message") {
+
+      const target = users[data.to];
+
+      if (target) {
+        target.send(JSON.stringify({
+          from: userId,
+          message: data.message,
+          createdAt: Date.now()
+        }));
+      }
+    }
+
+  });
+
+  ws.on("close", () => {
+    if (userId) {
+      delete users[userId];
+    }
+  });
+
 });
 
-app.listen(PORT, () => {
-  console.log("Server running on " + PORT);
-});
+console.log("WebSocket router running");
