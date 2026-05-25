@@ -1,0 +1,9 @@
+{
+  "name": "next-level-chat",
+  "version": "1.0.0",
+  "description": "Lightweight chat app with localStorage + Go server",
+  "main": "main.go",
+  "scripts": {
+    "start": "go run main.go"
+  }
+}
