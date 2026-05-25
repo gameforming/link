@@ -1,9 +1,11 @@
 {
-  "name": "next-level-chat",
+  "name": "chat-app",
   "version": "1.0.0",
-  "description": "Lightweight chat app with localStorage + Go server",
-  "main": "main.go",
+  "main": "server.js",
   "scripts": {
-    "start": "go run main.go"
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
   }
 }
