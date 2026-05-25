@@ -1,6 +1,8 @@
 const WebSocket = require("ws");
 
-const wss = new WebSocket.Server({ port: process.env.PORT || 3000 });
+const PORT = process.env.PORT;
+
+const wss = new WebSocket.Server({ port: PORT });
 
 // userId -> socket
 const users = {};
@@ -13,7 +15,7 @@ wss.on("connection", (ws) => {
 
     const data = JSON.parse(msg);
 
-    // REGISTER USER
+    // REGISTER
     if (data.type === "register") {
       userId = data.userId;
       users[userId] = ws;
@@ -23,10 +25,10 @@ wss.on("connection", (ws) => {
     // SEND MESSAGE
     if (data.type === "message") {
 
-      const targetSocket = users[data.to];
+      const target = users[data.to];
 
-      if (targetSocket) {
-        targetSocket.send(JSON.stringify({
+      if (target) {
+        target.send(JSON.stringify({
           type: "message",
           from: userId,
           text: data.text,
@@ -43,4 +45,4 @@ wss.on("connection", (ws) => {
 
 });
 
-console.log("WebSocket server running");
+console.log("WebSocket running on Render");
