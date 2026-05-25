@@ -13,22 +13,23 @@ wss.on("connection", (ws) => {
 
     const data = JSON.parse(msg);
 
-    // 1. register user
+    // REGISTER USER
     if (data.type === "register") {
       userId = data.userId;
       users[userId] = ws;
       return;
     }
 
-    // 2. send message
+    // SEND MESSAGE
     if (data.type === "message") {
 
-      const target = users[data.to];
+      const targetSocket = users[data.to];
 
-      if (target) {
-        target.send(JSON.stringify({
+      if (targetSocket) {
+        targetSocket.send(JSON.stringify({
+          type: "message",
           from: userId,
-          message: data.message,
+          text: data.text,
           createdAt: Date.now()
         }));
       }
@@ -37,11 +38,9 @@ wss.on("connection", (ws) => {
   });
 
   ws.on("close", () => {
-    if (userId) {
-      delete users[userId];
-    }
+    if (userId) delete users[userId];
   });
 
 });
 
-console.log("WebSocket router running");
+console.log("WebSocket server running");
