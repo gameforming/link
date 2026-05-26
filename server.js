@@ -1,214 +1,296 @@
-const express = require("express");
-const http = require("http");
-const WebSocket = require("ws");
-const path = require("path");
+import express from 'express';
+import http from 'http';
+import { WebSocketServer } from 'ws';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+import dotenv from 'dotenv';
+import helmet from 'helmet';
+
+import { createClient } from '@supabase/supabase-js';
+
+dotenv.config();
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 const server = http.createServer(app);
-const wss = new WebSocket.Server({ server });
+
+const wss = new WebSocketServer({
+  server
+});
 
 const PORT = process.env.PORT || 3000;
 
-// =========================
-// CONFIG
-// =========================
+app.use(helmet());
 
-const MAX_USERS = 40;
-const ADMIN_USER = "Sem Bijlsma";
+app.use(express.static(__dirname));
 
-// username -> socket
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE
+);
+
 const users = new Map();
 
-// =========================
-// FRONTEND SERVE
-// =========================
+async function saveUser(username) {
+  try {
+    await supabase
+      .from('users')
+      .upsert({
+        username
+      });
+  } catch (err) {
+    console.error('Save user error:', err);
+  }
+}
 
-app.use(express.static(path.join(__dirname)));
+async function saveOfflineMessage(
+  senderUsername,
+  receiverUsername,
+  content,
+  delivered
+) {
+  try {
+    await supabase
+      .from('messages')
+      .insert({
+        sender_username: senderUsername,
+        receiver_username: receiverUsername,
+        content,
+        delivered
+      });
+  } catch (err) {
+    console.error('Save message error:', err);
+  }
+}
 
-app.get("/api/ping", (req, res) => {
-  res.json({
-    ok: true,
-    users: users.size
-  });
-});
+async function getOfflineMessages(username) {
+  try {
+    const { data } = await supabase
+      .from('messages')
+      .select('*')
+      .eq('receiver_username', username)
+      .eq('delivered', false)
+      .order('created_at', {
+        ascending: true
+      });
 
-// =========================
-// WEBSOCKET
-// =========================
+    return data || [];
+  } catch (err) {
+    console.error('Get offline messages error:', err);
+    return [];
+  }
+}
 
-wss.on("connection", (ws) => {
+async function markMessagesDelivered(username) {
+  try {
+    await supabase
+      .from('messages')
+      .update({
+        delivered: true
+      })
+      .eq('receiver_username', username)
+      .eq('delivered', false);
+  } catch (err) {
+    console.error('Update delivered error:', err);
+  }
+}
 
-  let currentUser = null;
+wss.on('connection', (ws) => {
 
-  ws.on("message", (raw) => {
+  let currentUsername = null;
+
+  console.log('Client connected');
+
+  ws.send(JSON.stringify({
+    type: 'connected'
+  }));
+
+  ws.on('message', async (rawMessage) => {
 
     try {
 
-      const data = JSON.parse(raw);
+      const data = JSON.parse(rawMessage.toString());
 
-      // =========================
-      // REGISTER
-      // =========================
+      // LOGIN
+      if (data.type === 'login') {
 
-      if (data.type === "register") {
+        const username = String(data.username || '')
+          .trim();
 
-        const username = data.userId;
-
-        if (!username || !username.trim()) {
-          ws.send(JSON.stringify({
-            type: "error",
-            message: "Invalid username"
-          }));
+        if (!username) {
           return;
         }
 
-        // ❌ duplicate username block
-        if (users.has(username)) {
-          ws.send(JSON.stringify({
-            type: "error",
-            message: "Username already taken"
-          }));
-          return;
-        }
+        currentUsername = username;
 
-        if (users.size >= MAX_USERS) {
-          ws.send(JSON.stringify({
-            type: "error",
-            message: "Server full"
-          }));
-          return;
-        }
-
-        currentUser = username;
         users.set(username, ws);
 
+        await saveUser(username);
+
         ws.send(JSON.stringify({
-          type: "registered",
-          userId: username
+          type: 'login_success',
+          username
         }));
 
-        console.log("CONNECTED:", username);
+        // OFFLINE MESSAGES
+        const offlineMessages =
+          await getOfflineMessages(username);
 
-        // notify admin
-        const adminSocket = users.get(ADMIN_USER);
+        ws.send(JSON.stringify({
+          type: 'offline_messages',
+          messages: offlineMessages
+        }));
 
-        if (adminSocket) {
-          adminSocket.send(JSON.stringify({
-            type: "message",
-            from: "SYSTEM",
-            text: `${username} joined`,
-            createdAt: Date.now()
-          }));
-        }
+        await markMessagesDelivered(username);
 
-        return;
+        // SEND USER LIST
+        const onlineUsers = [...users.keys()];
+
+        wss.clients.forEach(client => {
+
+          if (
+            client.readyState === 1
+          ) {
+
+            client.send(JSON.stringify({
+              type: 'users',
+              users: onlineUsers
+            }));
+
+          }
+
+        });
+
       }
 
-      // =========================
       // MESSAGE
-      // =========================
+      if (data.type === 'message') {
 
-      if (data.type === "message") {
+        const targetUsername =
+          String(data.targetUsername || '')
+            .trim();
+
+        const message =
+          String(data.message || '')
+            .trim();
+
+        if (
+          !targetUsername ||
+          !message ||
+          !currentUsername
+        ) {
+          return;
+        }
+
+        const targetSocket =
+          users.get(targetUsername);
 
         const payload = {
-          type: "message",
-          from: currentUser,
-          text: data.text,
+          type: 'message',
+          sender: currentUsername,
+          message,
           createdAt: Date.now()
         };
 
-        const targetSocket = users.get(data.to);
+        // USER ONLINE
+        if (
+          targetSocket &&
+          targetSocket.readyState === 1
+        ) {
 
-        // send to receiver
-        if (targetSocket) {
-          targetSocket.send(JSON.stringify(payload));
+          targetSocket.send(
+            JSON.stringify(payload)
+          );
+
+          await saveOfflineMessage(
+            currentUsername,
+            targetUsername,
+            message,
+            true
+          );
+
         }
 
-        // send back to sender
+        // USER OFFLINE
+        else {
+
+          await saveOfflineMessage(
+            currentUsername,
+            targetUsername,
+            message,
+            false
+          );
+
+        }
+
+        // ECHO BACK TO SENDER
         ws.send(JSON.stringify({
-          ...payload,
-          self: true
+          type: 'message_sent',
+          targetUsername,
+          message
         }));
 
-        // =========================
-        // ADMIN SUPPORT ROUTING
-        // =========================
-
-        if (data.to === "ADMIN_SUPPORT") {
-
-          const adminSocket = users.get(ADMIN_USER);
-
-          if (adminSocket) {
-            adminSocket.send(JSON.stringify({
-              type: "message",
-              from: "ADMIN_SUPPORT",
-              text: data.text,
-              createdAt: Date.now()
-            }));
-          }
-
-          console.log("BUG REPORT:", payload);
-        }
-
-        return;
       }
 
-      // =========================
-      // REQUEST
-      // =========================
+    }
 
-      if (data.type === "request") {
+    catch (err) {
 
-        const targetSocket = users.get(data.to);
+      console.error(err);
 
-        if (targetSocket) {
-          targetSocket.send(JSON.stringify({
-            type: "request",
-            from: currentUser
-          }));
-        }
+      ws.send(JSON.stringify({
+        type: 'error',
+        message: 'Server error'
+      }));
 
-        return;
-      }
-
-    } catch (err) {
-      console.log("WS ERROR:", err);
     }
 
   });
 
-  // =========================
-  // DISCONNECT
-  // =========================
+  ws.on('close', () => {
 
-  ws.on("close", () => {
+    console.log('Client disconnected');
 
-    if (currentUser) {
-
-      users.delete(currentUser);
-
-      console.log("DISCONNECTED:", currentUser);
-
-      const adminSocket = users.get(ADMIN_USER);
-
-      if (adminSocket) {
-        adminSocket.send(JSON.stringify({
-          type: "message",
-          from: "SYSTEM",
-          text: `${currentUser} left`,
-          createdAt: Date.now()
-        }));
-      }
+    if (currentUsername) {
+      users.delete(currentUsername);
     }
+
+    const onlineUsers = [...users.keys()];
+
+    wss.clients.forEach(client => {
+
+      if (
+        client.readyState === 1
+      ) {
+
+        client.send(JSON.stringify({
+          type: 'users',
+          users: onlineUsers
+        }));
+
+      }
+
+    });
 
   });
 
 });
 
-// =========================
-// START SERVER
-// =========================
+app.get('/health', (req, res) => {
+
+  res.json({
+    status: 'ok'
+  });
+
+});
 
 server.listen(PORT, () => {
-  console.log("Server running on port", PORT);
+
+  console.log(
+    `Server running on port ${PORT}`
+  );
+
 });
