@@ -8,41 +8,76 @@
 
   <link rel="stylesheet" href="css/app.css">
 </head>
+
 <body>
+
+<!-- TOPBAR -->
 <div class="topbar">
-
-  <input
-    id="username-input"
-    placeholder="Choose username"
-  />
-
-  <button id="save-username-btn">
-    Save
-  </button>
-
+  <input id="username-input" placeholder="Choose username" />
+  <button id="save-username-btn">Save</button>
 </div>
+
 <div id="app">
 
+  <!-- SIDEBAR -->
   <aside class="sidebar">
 
-    <button class="tab-button active" data-tab="contacts">
-      C
-    </button>
-
-    <button class="tab-button" data-tab="requests">
-      R
-    </button>
-
-    <button class="tab-button" data-tab="groups">
-      G
-    </button>
-
-    <button class="tab-button" data-tab="rules">
-      ?
-    </button>
+    <button class="tab-button active" data-panel="contacts">C</button>
+    <button class="tab-button" data-panel="requests">R</button>
+    <button class="tab-button" data-panel="groups">G</button>
+    <button class="tab-button" data-panel="rules">?</button>
 
   </aside>
 
-
+  <!-- LEFT PANEL -->
   <section class="left-panel">
+
+    <!-- CONTACTS -->
+    <div id="contacts" class="panel active">
+      <div id="contacts-container"></div>
+    </div>
+
+    <!-- REQUESTS -->
+    <div id="requests" class="panel">
+      <div class="request-send">
+        <input id="request-user-input" placeholder="Username" />
+        <button id="send-request-btn">Send Request</button>
+      </div>
+
+      <div id="requests-container"></div>
+    </div>
+
+    <!-- GROUPS -->
+    <div id="groups" class="panel">
+      <p>Groups coming soon...</p>
+    </div>
+
+    <!-- RULES -->
+    <div id="rules" class="panel">
+      <div id="rules-content"></div>
+    </div>
+
+  </section>
+
+  <!-- CHAT PANEL -->
+  <section class="chat-panel">
+
+    <div id="messages-container"></div>
+
+    <div class="chat-input">
+      <input id="message-input" placeholder="Type message..." />
+      <button id="send-btn">Send</button>
+    </div>
+
+    <button id="clear-chat-btn">Clear Chat</button>
+
+    <div id="notification-badge"></div>
+
+  </section>
+
+</div>
+
+<script src="js/app.js"></script>
+
+</body>
 </html>
