@@ -97,7 +97,7 @@ state.messages = loadStorage("messages", []);
 // =============================
 
 const ws = new WebSocket(
-  "wss://YOUR-RENDER-URL.onrender.com"
+  "wss://link-9ec2.onrender.com"
 );
 
 ws.onopen = () => {
