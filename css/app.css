@@ -21,7 +21,144 @@ body {
   font-family: Arial, sans-serif;
   overflow: hidden;
 }
+body {
+  margin: 0;
+  font-family: Arial;
+  background: #0f0f0f;
+  color: white;
+}
 
+/* TOPBAR */
+.topbar {
+  display: flex;
+  gap: 10px;
+  padding: 10px;
+  background: #111;
+  border-bottom: 1px solid #222;
+}
+
+.topbar input {
+  flex: 1;
+  padding: 8px;
+  background: #222;
+  border: none;
+  color: white;
+}
+
+.topbar button {
+  padding: 8px 12px;
+  background: #333;
+  border: none;
+  color: white;
+  cursor: pointer;
+}
+
+/* APP LAYOUT */
+#app {
+  display: flex;
+  height: calc(100vh - 50px);
+}
+
+/* SIDEBAR */
+.sidebar {
+  width: 50px;
+  background: #111;
+  display: flex;
+  flex-direction: column;
+}
+
+.tab-button {
+  padding: 15px;
+  background: none;
+  border: none;
+  color: white;
+  cursor: pointer;
+}
+
+.tab-button.active {
+  background: #333;
+}
+
+/* LEFT PANEL */
+.left-panel {
+  width: 300px;
+  background: #151515;
+  overflow-y: auto;
+}
+
+/* CHAT PANEL */
+.chat-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: #0d0d0d;
+}
+
+#messages-container {
+  flex: 1;
+  padding: 10px;
+  overflow-y: auto;
+}
+
+/* INPUT */
+.chat-input {
+  display: flex;
+  gap: 10px;
+  padding: 10px;
+  border-top: 1px solid #222;
+}
+
+.chat-input input {
+  flex: 1;
+  padding: 10px;
+  background: #222;
+  border: none;
+  color: white;
+}
+
+.chat-input button {
+  padding: 10px;
+  background: #333;
+  border: none;
+  color: white;
+}
+
+/* MESSAGE */
+.message {
+  padding: 8px;
+  margin-bottom: 8px;
+  background: #222;
+  border-radius: 5px;
+}
+
+.message.self {
+  background: #2b5;
+}
+
+/* REQUESTS */
+.request-send {
+  display: flex;
+  gap: 10px;
+  padding: 10px;
+}
+
+.request-send input {
+  flex: 1;
+  padding: 8px;
+  background: #222;
+  border: none;
+  color: white;
+}
+
+/* NOTIFICATIONS */
+#notification-badge {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: red;
+  padding: 5px 10px;
+  border-radius: 10px;
+}
 #app {
   display: flex;
   width: 100vw;
