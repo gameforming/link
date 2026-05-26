@@ -1,6 +1,6 @@
-// =============================
+// =====================================
 // STATE
-// =============================
+// =====================================
 
 const state = {
   currentUser: null,
@@ -12,49 +12,52 @@ const state = {
   notifications: 0
 };
 
-// =============================
+// =====================================
 // DOM
-// =============================
+// =====================================
 
 const messagesContainer = document.getElementById("messages-container");
-const messageInput = document.getElementById("message-input");
-const sendButton = document.getElementById("send-btn");
 const contactsContainer = document.getElementById("contacts-container");
 const requestsContainer = document.getElementById("requests-container");
-const notificationBadge = document.getElementById("notification-badge");
+const messageInput = document.getElementById("message-input");
+const sendButton = document.getElementById("send-btn");
 const clearChatBtn = document.getElementById("clear-chat-btn");
-const addContactBtn = document.getElementById("add-contact-btn");
+const notificationBadge = document.getElementById("notification-badge");
 
-// =============================
-// USER SYSTEM
-// =============================
+const usernameInput = document.getElementById("username-input");
+const saveUsernameBtn = document.getElementById("save-username-btn");
+
+const requestUserInput = document.getElementById("request-user-input");
+const sendRequestBtn = document.getElementById("send-request-btn");
+
+// =====================================
+// USER INIT
+// =====================================
 
 function initUser() {
 
   let user = localStorage.getItem("chat_user");
 
   if (!user) {
-
-    user = prompt("Choose username");
-
-    if (!user || !user.trim()) {
-      user = "user_" + Math.floor(Math.random() * 9999);
-    }
-
+    user = "user_" + Math.floor(Math.random() * 9999);
     localStorage.setItem("chat_user", user);
   }
 
   state.currentUser = user;
 
+  if (usernameInput) {
+    usernameInput.value = user;
+  }
+
 }
 
 initUser();
 
-// =============================
+// =====================================
 // STORAGE HELPERS
-// =============================
+// =====================================
 
-function getStorageKey(type) {
+function storageKey(type) {
   return `${type}_${state.currentUser}`;
 }
 
@@ -62,42 +65,55 @@ function loadStorage(type, fallback = []) {
 
   try {
 
-    const data = localStorage.getItem(getStorageKey(type));
+    const data = localStorage.getItem(storageKey(type));
 
     if (!data) return fallback;
 
     return JSON.parse(data);
 
   } catch {
+
     return fallback;
+
   }
 
 }
 
-function saveStorage(type, data) {
+function saveStorage(type, value) {
 
   localStorage.setItem(
-    getStorageKey(type),
-    JSON.stringify(data)
+    storageKey(type),
+    JSON.stringify(value)
   );
 
 }
 
-// =============================
+// =====================================
 // LOAD STATE
-// =============================
+// =====================================
 
 state.contacts = loadStorage("contacts", []);
 state.requests = loadStorage("requests", []);
 state.groups = loadStorage("groups", []);
 state.messages = loadStorage("messages", []);
 
-// =============================
+// =====================================
+// ADMIN SUPPORT
+// =====================================
+
+if (!state.contacts.includes("ADMIN_SUPPORT")) {
+
+  state.contacts.unshift("ADMIN_SUPPORT");
+
+  saveStorage("contacts", state.contacts);
+}
+
+// =====================================
 // WEBSOCKET
-// =============================
+// =====================================
 
 const ws = new WebSocket(
-  "wss://link-9ec2.onrender.com"
+  "wss://YOUR-RENDER-URL.onrender.com"
 );
 
 ws.onopen = () => {
@@ -107,21 +123,21 @@ ws.onopen = () => {
     userId: state.currentUser
   }));
 
-  console.log("Connected to server");
+  console.log("Connected to websocket");
 
 };
 
 ws.onclose = () => {
-  console.log("Disconnected from server");
+  console.log("Disconnected from websocket");
 };
 
 ws.onerror = (err) => {
   console.log(err);
 };
 
-// =============================
-// RECEIVE MESSAGES
-// =============================
+// =====================================
+// RECEIVE
+// =====================================
 
 ws.onmessage = (event) => {
 
@@ -129,13 +145,25 @@ ws.onmessage = (event) => {
 
   // REGISTERED
   if (data.type === "registered") {
-    console.log("Registered as", data.userId);
+
+    console.log("Registered:", data.userId);
+
     return;
   }
 
   // ERROR
   if (data.type === "error") {
+
     alert(data.message);
+
+    return;
+  }
+
+  // REQUEST
+  if (data.type === "request") {
+
+    addRequest(data.from);
+
     return;
   }
 
@@ -150,39 +178,68 @@ ws.onmessage = (event) => {
       chat: data.self
         ? state.currentChat
         : data.from,
-      ttl: 1000
+      deleteCounter: 1000
     };
 
     state.messages.push(message);
 
-    // MAX 1000
+    // LIMIT 1000
     if (state.messages.length > 1000) {
 
       state.messages.shift();
 
-      // TTL UPDATE
-      state.messages = state.messages.map(m => ({
-        ...m,
-        ttl: Math.min((m.ttl || 0) + 1, 1000)
+      state.messages = state.messages.map(msg => ({
+        ...msg,
+        deleteCounter: Math.min(
+          (msg.deleteCounter || 0) + 1,
+          1000
+        )
       }));
+
     }
 
     saveStorage("messages", state.messages);
 
-    // Notifications
-    if (!data.self && state.currentChat !== data.from) {
+    // NOTIFICATIONS
+    if (
+      !data.self &&
+      state.currentChat !== data.from
+    ) {
+
       state.notifications++;
+
       renderNotifications();
     }
 
     renderMessages();
+
   }
 
 };
 
-// =============================
+// =====================================
+// USERNAME SAVE
+// =====================================
+
+if (saveUsernameBtn) {
+
+  saveUsernameBtn.onclick = () => {
+
+    const value = usernameInput.value.trim();
+
+    if (!value) return;
+
+    localStorage.setItem("chat_user", value);
+
+    location.reload();
+
+  };
+
+}
+
+// =====================================
 // CONTACTS
-// =============================
+// =====================================
 
 function addContact(name) {
 
@@ -191,7 +248,9 @@ function addContact(name) {
   if (state.contacts.includes(name)) return;
 
   if (state.contacts.length >= 40) {
-    alert("Max 40 contacts");
+
+    alert("Max contacts reached");
+
     return;
   }
 
@@ -200,23 +259,25 @@ function addContact(name) {
   saveStorage("contacts", state.contacts);
 
   renderContacts();
+
 }
 
 function removeContact(name) {
 
   const confirmed = confirm(
-    `Delete contact ${name}?`
+    `Delete ${name}?`
   );
 
   if (!confirmed) return;
 
   state.contacts = state.contacts.filter(
-    c => c !== name
+    contact => contact !== name
   );
 
   saveStorage("contacts", state.contacts);
 
   renderContacts();
+
 }
 
 function renderContacts() {
@@ -243,7 +304,9 @@ function renderContacts() {
     div.innerHTML = `
       <div class="contact-left">
         <div class="contact-name">${contact}</div>
-        <div class="contact-meta">Click to open chat</div>
+        <div class="contact-meta">
+          Click to open chat
+        </div>
       </div>
 
       <div class="contact-actions">
@@ -259,21 +322,25 @@ function renderContacts() {
       state.currentChat = contact;
 
       renderMessages();
+
     };
 
     div.querySelector(".delete-btn")
       .onclick = () => {
 
       removeContact(contact);
+
     };
 
     contactsContainer.appendChild(div);
+
   });
+
 }
 
-// =============================
+// =====================================
 // REQUESTS
-// =============================
+// =====================================
 
 function addRequest(name) {
 
@@ -286,6 +353,7 @@ function addRequest(name) {
   saveStorage("requests", state.requests);
 
   renderRequests();
+
 }
 
 function acceptRequest(name) {
@@ -293,23 +361,25 @@ function acceptRequest(name) {
   addContact(name);
 
   state.requests = state.requests.filter(
-    r => r !== name
+    request => request !== name
   );
 
   saveStorage("requests", state.requests);
 
   renderRequests();
+
 }
 
 function deleteRequest(name) {
 
   state.requests = state.requests.filter(
-    r => r !== name
+    request => request !== name
   );
 
   saveStorage("requests", state.requests);
 
   renderRequests();
+
 }
 
 function renderRequests() {
@@ -327,7 +397,7 @@ function renderRequests() {
     return;
   }
 
-  state.requests.forEach(req => {
+  state.requests.forEach(request => {
 
     const div = document.createElement("div");
 
@@ -335,11 +405,14 @@ function renderRequests() {
 
     div.innerHTML = `
       <div class="contact-left">
-        <div class="contact-name">${req}</div>
-        <div class="contact-meta">Incoming request</div>
+        <div class="contact-name">${request}</div>
+        <div class="contact-meta">
+          Incoming request
+        </div>
       </div>
 
       <div class="contact-actions">
+
         <button class="accept-btn">
           Accept
         </button>
@@ -347,22 +420,57 @@ function renderRequests() {
         <button class="delete-btn">
           Delete
         </button>
+
       </div>
     `;
 
     div.querySelector(".accept-btn")
-      .onclick = () => acceptRequest(req);
+      .onclick = () => {
+
+      acceptRequest(request);
+
+    };
 
     div.querySelector(".delete-btn")
-      .onclick = () => deleteRequest(req);
+      .onclick = () => {
+
+      deleteRequest(request);
+
+    };
 
     requestsContainer.appendChild(div);
+
   });
+
 }
 
-// =============================
+// =====================================
+// SEND REQUEST
+// =====================================
+
+if (sendRequestBtn) {
+
+  sendRequestBtn.onclick = () => {
+
+    const target =
+      requestUserInput.value.trim();
+
+    if (!target) return;
+
+    ws.send(JSON.stringify({
+      type: "request",
+      to: target
+    }));
+
+    requestUserInput.value = "";
+
+  };
+
+}
+
+// =====================================
 // GROUPS
-// =============================
+// =====================================
 
 function createGroup(name, members = []) {
 
@@ -373,16 +481,19 @@ function createGroup(name, members = []) {
   });
 
   saveStorage("groups", state.groups);
+
 }
 
-// =============================
+// =====================================
 // SEND MESSAGE
-// =============================
+// =====================================
 
 function sendMessage(to, text) {
 
   if (!to) {
+
     alert("No chat selected");
+
     return;
   }
 
@@ -396,72 +507,80 @@ function sendMessage(to, text) {
 
 }
 
-// =============================
+// =====================================
 // RENDER MESSAGES
-// =============================
+// =====================================
 
 function renderMessages() {
 
   messagesContainer.innerHTML = "";
 
-  const filtered = state.messages.filter(
-    msg => msg.chat === state.currentChat
+  const messages = state.messages.filter(
+    message => message.chat === state.currentChat
   );
 
-  filtered.forEach(msg => {
+  messages.forEach(message => {
 
     const div = document.createElement("div");
 
-    div.className = msg.self
+    div.className = message.self
       ? "message self"
       : "message";
 
     const time = new Date(
-      msg.createdAt
+      message.createdAt
     ).toLocaleTimeString();
 
     div.innerHTML = `
       <div class="message-header">
-        <span>${msg.sender}</span>
+        <span>${message.sender}</span>
         <span>${time}</span>
       </div>
 
       <div class="message-content">
-        ${msg.text}
+        ${message.text}
       </div>
 
-      <div class="message-counter">
-        Deletes in: ${msg.ttl}
+      <div class="message-delete-counter">
+        Deletes in: ${message.deleteCounter}
       </div>
     `;
 
     messagesContainer.appendChild(div);
+
   });
 
   messagesContainer.scrollTop =
     messagesContainer.scrollHeight;
+
 }
 
-// =============================
+// =====================================
 // NOTIFICATIONS
-// =============================
+// =====================================
 
 function renderNotifications() {
+
+  if (!notificationBadge) return;
 
   notificationBadge.textContent =
     state.notifications;
 
   if (state.notifications <= 0) {
+
     notificationBadge.style.display = "none";
+
   } else {
+
     notificationBadge.style.display = "flex";
+
   }
 
 }
 
-// =============================
+// =====================================
 // CLEAR CHAT
-// =============================
+// =====================================
 
 function clearCurrentChat() {
 
@@ -474,111 +593,170 @@ function clearCurrentChat() {
   if (!confirmed) return;
 
   state.messages = state.messages.filter(
-    m => m.chat !== state.currentChat
+    message => message.chat !== state.currentChat
   );
 
   saveStorage("messages", state.messages);
 
   renderMessages();
+
 }
 
-// =============================
-// TABS
-// =============================
+// =====================================
+// SIDEBAR TAB SWITCHING
+// =====================================
 
 function switchPanel(id) {
 
   document.querySelectorAll(".panel")
     .forEach(panel => {
+
       panel.classList.remove("active");
+
     });
 
   document.querySelectorAll(".tab-button")
-    .forEach(btn => {
-      btn.classList.remove("active");
+    .forEach(button => {
+
+      button.classList.remove("active");
+
     });
 
-  document.getElementById(id)
-    .classList.add("active");
+  const targetPanel =
+    document.getElementById(id);
 
-  document.querySelector(`[data-panel='${id}']`)
-    .classList.add("active");
+  if (targetPanel) {
+    targetPanel.classList.add("active");
+  }
+
+  const activeButton =
+    document.querySelector(
+      `[data-panel='${id}']`
+    );
+
+  if (activeButton) {
+    activeButton.classList.add("active");
+  }
+
 }
 
-// =============================
-// RULES TAB
-// =============================
+// FIX SIDEBAR BUTTONS
+
+document
+  .querySelectorAll(".tab-button")
+  .forEach(button => {
+
+    button.onclick = () => {
+
+      const panel =
+        button.dataset.panel;
+
+      switchPanel(panel);
+
+    };
+
+  });
+
+// =====================================
+// RULES
+// =====================================
 
 function renderRules() {
 
-  const rules = document.getElementById("rules-content");
+  const rules =
+    document.getElementById("rules-content");
 
   if (!rules) return;
 
   rules.innerHTML = `
 
-    <h3>How this app works</h3>
+    <h2>Rules & Information</h2>
 
     <p>
-      This chat app uses a Render WebSocket server.
-      Messages are routed live between connected users.
+      This app uses a Render WebSocket backend.
     </p>
 
     <p>
-      localStorage is used for caching:
-      contacts, messages, requests and groups.
+      Messages are routed live between users.
     </p>
 
     <p>
-      The server does not permanently store messages.
-      It only routes messages to online users.
+      localStorage stores:
+      contacts,
+      messages,
+      requests,
+      groups
+      and settings.
     </p>
 
     <p>
-      Max messages stored locally: 1000.
-      Max contacts: 40.
+      Messages are capped at 1000.
+      Oldest messages get deleted.
+    </p>
+
+    <p>
+      Contacts are capped at 40.
+    </p>
+
+    <p>
+      ADMIN_SUPPORT can be used to
+      report bugs and issues.
     </p>
 
   `;
+
 }
 
-// =============================
+// =====================================
 // EVENTS
-// =============================
+// =====================================
 
-sendButton.onclick = () => {
+if (sendButton) {
 
-  sendMessage(
-    state.currentChat,
-    messageInput.value
+  sendButton.onclick = () => {
+
+    sendMessage(
+      state.currentChat,
+      messageInput.value
+    );
+
+    messageInput.value = "";
+
+  };
+
+}
+
+if (messageInput) {
+
+  messageInput.addEventListener(
+    "keydown",
+    (event) => {
+
+      if (
+        event.key === "Enter" &&
+        !event.shiftKey
+      ) {
+
+        event.preventDefault();
+
+        sendButton.click();
+
+      }
+
+    }
   );
 
-  messageInput.value = "";
-};
+}
 
-messageInput.addEventListener("keydown", (e) => {
+if (clearChatBtn) {
 
-  if (e.key === "Enter" && !e.shiftKey) {
+  clearChatBtn.onclick = clearCurrentChat;
 
-    e.preventDefault();
+}
 
-    sendButton.click();
-  }
-
-});
-
-clearChatBtn.onclick = clearCurrentChat;
-
-addContactBtn.onclick = () => {
-
-  const name = prompt("Contact username");
-
-  addContact(name);
-};
-
-// =============================
+// =====================================
 // INIT
-// =============================
+// =====================================
 
 renderContacts();
 renderRequests();
@@ -586,4 +764,4 @@ renderMessages();
 renderNotifications();
 renderRules();
 
-console.log("App initialized");
+console.log("Chat app initialized");
