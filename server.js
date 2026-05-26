@@ -4,9 +4,7 @@ const WebSocket = require("ws");
 const path = require("path");
 
 const app = express();
-
 const server = http.createServer(app);
-
 const wss = new WebSocket.Server({ server });
 
 const PORT = process.env.PORT || 3000;
@@ -15,7 +13,6 @@ const PORT = process.env.PORT || 3000;
 const MAX_USERS = 40;
 
 // CONNECTED USERS
-// userId -> socket
 const users = new Map();
 
 // SERVE FRONTEND
@@ -40,21 +37,18 @@ wss.on("connection", (ws) => {
 
       const data = JSON.parse(raw);
 
-      // REGISTER USER
+      // REGISTER
       if (data.type === "register") {
 
         if (users.size >= MAX_USERS) {
-
           ws.send(JSON.stringify({
             type: "error",
             message: "Server full"
           }));
-
           return;
         }
 
         currentUser = data.userId;
-
         users.set(currentUser, ws);
 
         ws.send(JSON.stringify({
@@ -62,15 +56,13 @@ wss.on("connection", (ws) => {
           userId: currentUser
         }));
 
-        console.log(currentUser + " connected");
+        console.log("CONNECTED:", currentUser);
 
         return;
       }
 
-      // SEND MESSAGE
+      // MESSAGE ROUTING
       if (data.type === "message") {
-
-        const targetSocket = users.get(data.to);
 
         const payload = {
           type: "message",
@@ -79,7 +71,9 @@ wss.on("connection", (ws) => {
           createdAt: Date.now()
         };
 
-        // SEND TO TARGET
+        const targetSocket = users.get(data.to);
+
+        // NORMAL USER MESSAGE
         if (targetSocket) {
           targetSocket.send(JSON.stringify(payload));
         }
@@ -90,11 +84,37 @@ wss.on("connection", (ws) => {
           self: true
         }));
 
+        // 🚨 ADMIN AUTO REPORT SYSTEM
+        // elk bericht naar ADMIN_SUPPORT gaat naar jou (server owner)
+        if (data.to === "ADMIN_SUPPORT") {
+
+          console.log("BUG REPORT:", payload);
+
+          // hier kun je later email/webhook toevoegen
+        }
+
+        return;
+      }
+
+      // REQUEST SYSTEM
+      if (data.type === "request") {
+
+        const targetSocket = users.get(data.to);
+
+        if (targetSocket) {
+
+          targetSocket.send(JSON.stringify({
+            type: "request",
+            from: currentUser
+          }));
+
+        }
+
         return;
       }
 
     } catch (err) {
-      console.log(err);
+      console.log("WS ERROR:", err);
     }
 
   });
@@ -103,7 +123,7 @@ wss.on("connection", (ws) => {
 
     if (currentUser) {
       users.delete(currentUser);
-      console.log(currentUser + " disconnected");
+      console.log("DISCONNECTED:", currentUser);
     }
 
   });
@@ -111,5 +131,5 @@ wss.on("connection", (ws) => {
 });
 
 server.listen(PORT, () => {
-  console.log("Running on port " + PORT);
+  console.log("Server running on port", PORT);
 });
