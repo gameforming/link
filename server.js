@@ -1,48 +1,115 @@
+const express = require("express");
+const http = require("http");
 const WebSocket = require("ws");
+const path = require("path");
 
-const PORT = process.env.PORT;
+const app = express();
 
-const wss = new WebSocket.Server({ port: PORT });
+const server = http.createServer(app);
 
+const wss = new WebSocket.Server({ server });
+
+const PORT = process.env.PORT || 3000;
+
+// MAX USERS
+const MAX_USERS = 40;
+
+// CONNECTED USERS
 // userId -> socket
-const users = {};
+const users = new Map();
 
+// SERVE FRONTEND
+app.use(express.static(path.join(__dirname)));
+
+// HEALTH CHECK
+app.get("/api/ping", (req, res) => {
+  res.json({
+    ok: true,
+    users: users.size
+  });
+});
+
+// WEBSOCKET
 wss.on("connection", (ws) => {
 
-  let userId = null;
+  let currentUser = null;
 
-  ws.on("message", (msg) => {
+  ws.on("message", (raw) => {
 
-    const data = JSON.parse(msg);
+    try {
 
-    // REGISTER
-    if (data.type === "register") {
-      userId = data.userId;
-      users[userId] = ws;
-      return;
-    }
+      const data = JSON.parse(raw);
 
-    // SEND MESSAGE
-    if (data.type === "message") {
+      // REGISTER USER
+      if (data.type === "register") {
 
-      const target = users[data.to];
+        if (users.size >= MAX_USERS) {
 
-      if (target) {
-        target.send(JSON.stringify({
+          ws.send(JSON.stringify({
+            type: "error",
+            message: "Server full"
+          }));
+
+          return;
+        }
+
+        currentUser = data.userId;
+
+        users.set(currentUser, ws);
+
+        ws.send(JSON.stringify({
+          type: "registered",
+          userId: currentUser
+        }));
+
+        console.log(currentUser + " connected");
+
+        return;
+      }
+
+      // SEND MESSAGE
+      if (data.type === "message") {
+
+        const targetSocket = users.get(data.to);
+
+        const payload = {
           type: "message",
-          from: userId,
+          from: currentUser,
           text: data.text,
           createdAt: Date.now()
+        };
+
+        // SEND TO TARGET
+        if (targetSocket) {
+          targetSocket.send(JSON.stringify(payload));
+        }
+
+        // SEND BACK TO SENDER
+        ws.send(JSON.stringify({
+          ...payload,
+          self: true
         }));
+
+        return;
       }
+
+    } catch (err) {
+      console.log(err);
     }
 
   });
 
   ws.on("close", () => {
-    if (userId) delete users[userId];
+
+    if (currentUser) {
+      users.delete(currentUser);
+      console.log(currentUser + " disconnected");
+    }
+
   });
 
 });
 
-console.log("WebSocket running on Render");
+server.listen(PORT, () => {
+  console.log("Running on port " + PORT);
+});
